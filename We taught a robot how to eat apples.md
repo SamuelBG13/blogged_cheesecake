@@ -63,8 +63,8 @@ For one frame to be classified, average computation time on Nvidia GeForce 1080 
 
 For returning real world coordinates, the center coordinates of bounding boxes in image frame are considered. Later on, by using focal length and principal point parameters from camera intrinsic parameters the image coordinates are carried upon camera coordinate system as:
 
-X = (x - cx) / (fx**scaling_factor) <br />
-Y = (y - cy) / (fy**scaling_factor) <br />
+X = (x - cx) / (fx\*scaling_factor) <br />
+Y = (y - cy) / (fy\*scaling_factor) <br />
 
 cx and cy = principal point coordinates in x and y axis <br />
 fx and fy = focal length in x and y axis <br />
