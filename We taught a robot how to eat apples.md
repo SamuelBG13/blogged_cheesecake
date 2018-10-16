@@ -1,32 +1,24 @@
 # We taught a robot how to eat apples.
 
-Ok, we did not, it does not chew nor digest the apple.  But we taught it how to see one, reach for it and aovid obstacles in between.  Does that sond cool? Certainly. But, how did we do it?  How could it be useful? Well, stay with us to the end... 
+Ok, we did not, it does not chew nor digest the apple.  But we taught it how to see one, reach for it and aovid obstacles in between.  Does that sound cool? Certainly. But, how did we do it?  How could it be useful? Well, stay with us to the end... 
 
 
 
 ## How we did it
 
-Over the last couple of weeks our team the (dubbed the *Deterministically Suboptimal Cheesecakes*) had the chance to work with a Franka Emika Panda robotic arm. Our goal was to come up with a framework to that allows the robot to identify objects and other agents, distinguish them from background and the robot itself as well as avoid obstacles during the pursuit of its goals. Additionally we could implement a *brownie task* which would make use of the other features while performing an action such as cleaning up a table or handing objects to another agent. 
+Over the last couple of weeks our team the (dubbed the *Deterministically Suboptimal Cheesecakes*) had the chance to work with a Franka Emika Panda robotic arm. The general goal was to come up with a framework which would  allow the robotic arm to identify objects and other agents, distinguish them from background and itself as well as avoid obstacles during movement. Additionally we could implement a *brownie task* which would make use of the other features while performing an action such as cleaning up a table or handing objects to another agent. 
 
-We decided to make the robot look for an apple, reach for it, pick it up and finally hand it to a human. All of this while constantly trying to not crash into any of the surrounding obstacles. We then further divided this abstract task into three subcomponents: object identification (*Seeing*), movement (*Reaching*) and obstacle avoidance (*Sensing*). 
-
-
+After some experimenting we settled for a an apple-centered approach: we would make the robot look for an apple, reach for it, pick it up and finally hand it to a human. All of this while constantly trying to not crash into any of the surrounding obstacles. We then further divided this main task into three subcomponents: object identification (*Seeing*), movement (*Reaching*) and obstacle avoidance (*Sensing*).  
 
 
 
 #### Module 1  - Seeing
 
-To be able to interact with the world the robot must have some sense of what this world consists of, this means it has to identify objects as different from their background and be able to know where they are. For this part of the task we could make use of the pandas rgb-d camera, but even with color and depth information are still a huge challenge so the first step was to reduce and simplify: 
+To be able to interact with the world the robot must have some sense of what this world consists of. This means it has to be able to identify objects and be able to know where they are. For this part of the task we could make use of the pandas rgb-d camera, but even with color and depth information image segmentation and object identification still poses a huge technical challenge, so the first step was to reduce and simplify: 
 
-First of all we decided to not train an object detection network from scratch but make use of existing models. 
-
-
+First of all we decided to not train an object detection network from scratch but make use of existing models, namely the ????. Secondly we decided to limit the scope of objects drastically. Instead of making use of all the ??? categories that ???, we focused on only two: 'apples' and 'humans'
 
 [ decription of network]
-
-
-
-
 
 The image below shows an example classification. Obviously the network finds and localizes the apple (in the upper left corner) with high confidence. It also gives us bounding  boxes for other objects such as a suitcase, a laptop and a book, but we can safely ignore such hallucinations. 
 
@@ -37,6 +29,10 @@ The image below shows an example classification. Obviously the network finds and
 
 
 Once the apple is identified and localized within a bounding box we can use the information from the depth camera to far we have to reach. 
+
+[ decription of localization]
+
+
 
 
 
@@ -54,25 +50,34 @@ $$ y = y(x,t) &= A e^{i\theta} $$
 
 ```
 
+things we should mention: 
+
+- general description of ProMP framework + reference to paper 
+- advantages of ProMPs compared to derterministic trajectory 
+- Combination with obstacle avoidance 
+- mention that we only leared 3 promps
+
 #### Module 3  - Sensing
 
-As mentioned in the description our robotic arm is equipped with 9 LIDAR sensors. LIDARs (short for 'light' and 'radar') use light pulses to sense the distance to the next nearest object. In this project we use them for 'anomaly detection' where an 'anomaly' is simply anything unusual or unexpected that enters the robots field of operation. 
+Apart from the rgb-d camera the robot is aditionally equipped with  9 LIDAR sensors. LIDARs (short for 'light' and 'radar') use light pulses to sense the distance to the next nearest object. Here we use them for 'obstacle avoidance' or more generally 'anomaly detection' where an 'anomaly' is simply anything unusual or unexpected that enters the robots field of operation. 
 
 To define what's unusual and what's not we sample many trajectories from the ProMP framework and let the robot move along them while recording its joint-angles and LIDAR measurements at each point in time. We then use this 'normal' data to train 9 identical feed forward networks such that each of them learns to associate a given joint configuration with an expected signal to one of the LIDARs. 
 
 ![Lidar_Network](network.jpg)
 
-Once the networks have learned what sensory signals to expect in given position, we can compare these predictions to the actual measurements and use the deviation of the measurement from the prediction as indication that an anomaly has entered the scene. A little more specifically what we do is, we sample a timeseries of more or less 10 LIDAR measurements $$M$$ and joint-angel configurations over the course of 0.1s. We then calculate the predictions $$P$$ and calculate the deviation via: 
+Once the networks have learned what sensory signals to expect in given position, we can compare these predictions to the actual measurements and use the deviation of the measurement from the prediction as indication that an anomaly has entered the scene. A little more specifically what we do is, we sample a timeseries of roughly 10 LIDAR measurements $$M$$ and joint-angel configurations over the course of 0.1s. We then calculate the predictions $$P$$ from the joint angles and calculate the deviation via: 
 
 
 $$
 \overline{err} = median\left((P-M)\odot W\right)
 $$
-where $W$ is a matrix which importance to the errors based on the initial predition. This is because a miscalcualtion of 20 cm is less problematic 
+where $W$ is a matrix which weighs the errors based on the initial prediction (because a misprediction in an area  out of the robots reach should be feared less than one that might lead to a collision). Not using the absolute difference between $P$ and $M$ ensures that the robot only worries about things which are closer than expected (because only those pose any danger in  this setting). And finally taking the median over a number of samples balances out some of the measurement- noise. 
+
+Finally one could justifiably ask why we used this specific approach for predicting lidar measurements. Apart from the presented method we also experimented with LSTMs, Autoencoders and several types of feed forward networks. We settled for the current strategy simply because in the limited timeframe it turned out to be the only one we got to work. 
 
 
 
-Finally one could justifiably ask why we used this specific approach for predicting lidar measurements. Apart from the presented method we also experimented with LSTMS, Autoencoders and several types of feed forward networks. We settled for the current strategy simply because in the limited timeframe it turned out to be the only one we got to work. 
+## Adding the Parts together
 
 
 
