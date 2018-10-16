@@ -16,7 +16,21 @@ After some experimenting we settled for a an apple-centered approach: we would m
 
 To be able to interact with the world the robot must have some sense of what this world consists of. This means it has to be able to identify objects and be able to know where they are. For this part of the task we could make use of the pandas rgb-d camera, but even with color and depth information image segmentation and object identification still poses a huge technical challenge, so the first step was to reduce and simplify: 
 
-First of all we decided to not train an object detection network from scratch but make use of existing models, namely the ????. Secondly we decided to limit the scope of objects drastically. Instead of making use of all the ??? categories that ???, we focused on only two: 'apples' and 'humans'
+Prior goal is to find the locations of apples in a frame taken by the camera.
+
+First of all we decided to not train an object detection network from scratch but make use of existing models, mainly the models from Tensorflow API model zoo. Secondly we decided to limit the scope of objects drastically. Instead of making use of all the categories defined on dataset which network is trained, we focused on only two: 'apples' and 'humans'. After the network returns classification results, we filter them by these two categories.
+
+For giving an introduction to Tensorflow Object Detection API, there are several detection models provided by Tensorflow. Provided models have different architectures which are also trained on different datasets such as Kitti, CoCo and Open Image datasets etc. These models can be directly deployed in order to find objects in the range of datasets trained. 
+
+#### CoCo Dataset
+
+We chose the models trained on CoCo dataset for the purpose of detecting and locating apples on the scene. CoCo dataset is image dataset which has 90 categories spanning common objects such as apple, person, table, laptop etc. This dataset is used for segmentation, detection and captioning tasks.  Next to labels for images, it also provides annotations and masks for the location of objects as coordinates in image frames. So sequentially the networks trained on this dataset are trained on bounding boxes where the objects are located in the frame. 
+
+<img src="coco.png"
+     alt="Examples from CoCo dataset, images with masks of target categories"
+     style="float: left; margin-right: 10px;" />
+
+
 
 [ decription of network]
 
