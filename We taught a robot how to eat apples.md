@@ -56,10 +56,7 @@ For one frame to be classified, average computation time on Nvidia GeForce 1080 
 
 Once the apple is identified and localized within a bounding box we can use the information from the depth camera to far we have to reach. 
 
-
-
-For one frame to be classified, average computation time on Nvidia GeForce 1080 GPU is 60 ms. 
-
+#### From image coordinates to world coordinates
 
 For returning real world coordinates, the center coordinates of bounding boxes in image frame are considered. Later on, by using focal length and principal point parameters from camera intrinsic parameters the image coordinates are carried upon camera coordinate system as:
 
