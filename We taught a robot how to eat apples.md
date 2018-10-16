@@ -32,7 +32,19 @@ We chose the models trained on CoCo dataset for the purpose of detecting and loc
 
 
 
-[ decription of network]
+Without retraining them, we tested SSD and Faster-RCNN models from Tensorflow model zoo. SSD models are more beneficial when latency is priority. They return object proposals with their bounding boxes within just 1 feed forward pass. In Faster-RCNN the region proposals are offered first and over region proposals classifications are done. It is slower in comparison to SDD however its accuracy is higher. You can see main differences between them in the image below:
+
+<img src="network_ssd_frcnn.png"
+     alt="Comparison of SSD and Faster-RCNN architectures" />
+
+With SSD architecture, we observed that object size plays a bigger role, it cannot locate small objects accurately. In Faster-RCNN object size does not play that big role, therefore in the end we decided to use Faster-RCNN architecture from Tensorflow API. For beginning, VGG19 architecture is investigated which has 13 shareable convolutional layers. Over the convolutional layers, another network for region proposal is used. Output of last conv layer is fed into network. The output of region proposal network is fed into 2 sibling fully connected layers. One of them returns the coordinates of possible bounding boxes as the other one returns the objectness score (object vs not object). After the last VGG19 convolutional layer, region proposal network and connection to fully connected layers are shown in the figure below with example cases from Ren, He et. Al [1]. 
+
+<img src="region_proposal.png"
+     alt="Over fully connected layer, network of region proposal" />
+
+The training is done in a way, for each region proposed by the network, a binary label is assigned. The intersection over union between ground truth box and proposed region is found, if it is greater than 0.7 it is assigned +1, else if it is less than 0.3 it is assigned -1. The values in between 0.7 and 0.3 are not taken into consideration. The classification loss is taken as log loss between two classes (object vs not object). Mini batch stochastic gradient descent is used for training.
+
+For deploying the network, there are some configuration files provided which you can enter your details related to re-training and evaluation. It is deployed on Tensorflow and Python has been used for implementation. However we did not retrain it, after loading weights, feeding the interest frames into input tensor, bounding boxes, detected classes, classification scores are returned as output. You can find implementation under our source code *object_classification_toolbox.py / object_classifier.py*.  If you are interested in retraining [you can follow the post under page:](https://medium.com/@WuStangDan/step-by-step-tensorflow-object-detection-api-tutorial-part-1-selecting-a-model-a02b6aabe39e) .
 
 The image below shows an example classification. Obviously the network finds and localizes the apple (in the upper left corner) with high confidence. It also gives us bounding  boxes for other objects such as a suitcase, a laptop and a book, but we can safely ignore such hallucinations. 
 
@@ -40,12 +52,36 @@ The image below shows an example classification. Obviously the network finds and
 
 ![Apples](apple_detection.png)
 
-
+For one frame to be classified, average computation time on Nvidia GeForce 1080 GPU is 60 ms. 
 
 Once the apple is identified and localized within a bounding box we can use the information from the depth camera to far we have to reach. 
 
-[ decription of localization]
 
+
+For one frame to be classified, average computation time on Nvidia GeForce 1080 GPU is 60 ms. 
+
+
+For returning real world coordinates, the center coordinates of bounding boxes in image frame are considered. Later on, by using focal length and principal point parameters from camera intrinsic parameters the image coordinates are carried upon camera coordinate system as:
+
+X = (x - cx) / (fx*scaling_factor)
+Y = (y - cy) / (fy*scaling_factor)
+
+cx and cy = principal point coordinates in x and y axis
+fx and fy = focal length in x and y axis
+
+In Intel RealSense camera, focal length and principal point parameters are as:
+
+fx = 615.607
+fy = 615.607
+
+cx = 317.79
+cy = 239.907
+
+We calculate the coordinates in units of meter in the end. Later on by using rotation and translation of camera with respect to base of Franka panda robot, the real coordinates are transformed with respect to the base. 
+
+#### Finding other Franka agents
+
+Next goal of object detection is finding other Franka robots in the scene. For that, last layer of a pretrained network is decided to be retrained. For training Faster-RCNN it is necessary to bounding boxes of Franka images. Since it will be time consuming to annotate and there is not enough amount of clear images of Franka robot in the web, it was a better choice to retrain a network which was trained on image classification tasks. For that reason, Inception network trained on ImageNet is taken. For Franka classification, robotic arm images are gathered from the web. For Non-Franka classification, random images from PASCAL VOC2012 dataset are chosen. Data augmentation is applied by randomly scaling with coefficients between 0.5 and 1.5, randomly cropping by 20% offset from margins and adding gaussian noise. For both of the classes 150 images are gathered respectively, 70% of images are used for training, 30% is used for validation. Gradient descent by cross-entropy loss function is used in backpropagation. Training is repeated 4000 times. Currently, it discrimninates frontal images of Franka correctly, however when the background is white and there is no Franka in the scene, it is also giving false alarms, too. Therefore we think, probably since we did not have enough data, network might be over-fitting. Example cases of Franka images and non-Franka images used in training can be seen below:
 
 
 
@@ -104,6 +140,8 @@ The non-technical reader might be most impressed by our approach and achievement
 We think the opposite. We believe a robot that can interact with its environment might be very well used as a device that helps humans. Think about it: picture a robot arm in the house of a person with disabilities, either motor impairments or an elderly adult.  If this arm is in the capacity of interacting with the environment, detecting objects of the daily living and interacting with them, it would be well suited to become a personal helper of the individual, thus helping them gain a certain degree of independance. 
 
 This vision on assistive robotics is, of course, not new. But our belief is that  an holistic approach (i.e., a system in which machine learning, computer vision, classical robotics, human-robot interfaces and control theory are present and interact) is the way to go.  We hope that our progress with this Franka robot, who we nicknamed Sarah Connor*, helps laying a brick towards _that_ nicer future. 
+
+[1] Shaoqing Ren, Kaiming He, Ross B. Girschick, Jian Sun: Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks. IEEE Trans. Pattern Anal. Mach. Intell. 39(6): 1137-1149 (2017)
 
 /* No pun intended.
 
