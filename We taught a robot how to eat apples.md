@@ -63,19 +63,19 @@ For one frame to be classified, average computation time on Nvidia GeForce 1080 
 
 For returning real world coordinates, the center coordinates of bounding boxes in image frame are considered. Later on, by using focal length and principal point parameters from camera intrinsic parameters the image coordinates are carried upon camera coordinate system as:
 
-X = (x - cx) / (fx*scaling_factor)
-Y = (y - cy) / (fy*scaling_factor)
+X = (x - cx) / (fx*scaling_factor) <br />
+Y = (y - cy) / (fy*scaling_factor) <br />
 
-cx and cy = principal point coordinates in x and y axis
-fx and fy = focal length in x and y axis
+cx and cy = principal point coordinates in x and y axis <br />
+fx and fy = focal length in x and y axis <br />
 
-In Intel RealSense camera, focal length and principal point parameters are as:
+In Intel RealSense camera, focal length and principal point parameters are as: <br />
 
-fx = 615.607
-fy = 615.607
+fx = 615.607<br />
+fy = 615.607<br />
 
-cx = 317.79
-cy = 239.907
+cx = 317.79<br />
+cy = 239.907<br />
 
 We calculate the coordinates in units of meter in the end. Later on by using rotation and translation of camera with respect to base of Franka panda robot, the real coordinates are transformed with respect to the base. 
 
