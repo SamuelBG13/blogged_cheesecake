@@ -27,20 +27,20 @@ For giving an introduction to Tensorflow Object Detection API, there are several
 We chose the models trained on CoCo dataset for the purpose of detecting and locating apples on the scene. CoCo dataset is image dataset which has 90 categories spanning common objects such as apple, person, table, laptop etc. This dataset is used for segmentation, detection and captioning tasks.  Next to labels for images, it also provides annotations and masks for the location of objects as coordinates in image frames. So sequentially the networks trained on this dataset are trained on bounding boxes where the objects are located in the frame. 
 
 <img src="coco.png"
-     alt="Examples from CoCo dataset, images with masks of target categories"
-     style="float: left; margin-right: 10px;" />
+​     alt="Examples from CoCo dataset, images with masks of target categories"
+​     style="float: left; margin-right: 10px;" />
 
 
 
 Without retraining them, we tested SSD and Faster-RCNN models from Tensorflow model zoo. SSD models are more beneficial when latency is priority. They return object proposals with their bounding boxes within just 1 feed forward pass. In Faster-RCNN the region proposals are offered first and over region proposals classifications are done. It is slower in comparison to SDD however its accuracy is higher. You can see main differences between them in the image below:
 
 <img src="network_ssd_frcnn.png"
-     alt="Comparison of SSD and Faster-RCNN architectures" />
+​     alt="Comparison of SSD and Faster-RCNN architectures" />
 
 With SSD architecture, we observed that object size plays a bigger role, it cannot locate small objects accurately. In Faster-RCNN object size does not play that big role, therefore in the end we decided to use Faster-RCNN architecture from Tensorflow API. For beginning, VGG19 architecture is investigated which has 13 shareable convolutional layers. Over the convolutional layers, another network for region proposal is used. Output of last conv layer is fed into network. The output of region proposal network is fed into 2 sibling fully connected layers. One of them returns the coordinates of possible bounding boxes as the other one returns the objectness score (object vs not object). After the last VGG19 convolutional layer, region proposal network and connection to fully connected layers are shown in the figure below with example cases from Ren, He et. Al [1]. 
 
 <img src="region_proposal.png"
-     alt="Over fully connected layer, network of region proposal" />
+​     alt="Over fully connected layer, network of region proposal" />
 
 The training is done in a way, for each region proposed by the network, a binary label is assigned. The intersection over union between ground truth box and proposed region is found, if it is greater than 0.7 it is assigned +1, else if it is less than 0.3 it is assigned -1. The values in between 0.7 and 0.3 are not taken into consideration. The classification loss is taken as log loss between two classes (object vs not object). Mini batch stochastic gradient descent is used for training.
 
@@ -76,39 +76,13 @@ cy = 239.907<br />
 
 We calculate the coordinates in units of meter in the end. Later on by using rotation and translation of camera with respect to base of Franka panda robot, the real coordinates are transformed with respect to the base. 
 
-#### Finding other Franka agents
-
-Next goal of object detection is finding other Franka robots in the scene. For that, last layer of a pretrained network is decided to be retrained. For training Faster-RCNN it is necessary to bounding boxes of Franka images. Since it will be time consuming to annotate and there is not enough amount of clear images of Franka robot in the web, it was a better choice to retrain a network which was trained on image classification tasks. For that reason, Inception network trained on ImageNet is taken. For Franka classification, robotic arm images are gathered from the web. For Non-Franka classification, random images from PASCAL VOC2012 dataset are chosen. Data augmentation is applied by randomly scaling with coefficients between 0.5 and 1.5, randomly cropping by 20% offset from margins and adding gaussian noise. For both of the classes 150 images are gathered respectively, 70% of images are used for training, 30% is used for validation. Gradient descent by cross-entropy loss function is used in backpropagation. Training is repeated 4000 times. Currently, it discrimninates frontal images of Franka correctly, however when the background is white and there is no Franka in the scene, it is also giving false alarms, too. Therefore we think, probably since we did not have enough data, network might be over-fitting. Example cases of Franka images and non-Franka images used in training can be seen below:
 
 
-
-
-#### Module 2  - Reaching 
-
-Making a robot reach for a detected object might sound like a trivial problems. In robotics it is not. Helping 
-
-
-
-```Markdown
-$$ y = y(x,t) &= A e^{i\theta} $$
-
-
-
-
-```
-
-things we should mention: 
-
-- general description of ProMP framework + reference to paper 
-- advantages of ProMPs compared to derterministic trajectory 
-- Combination with obstacle avoidance 
-- mention that we only leared 3 promps
-
-#### Module 3  - Sensing
+#### Module 2  - Sensing
 
 Apart from the rgb-d camera the robot is aditionally equipped with  9 LIDAR sensors. LIDARs (short for 'light' and 'radar') use light pulses to sense the distance to the next nearest object. Here we use them for 'obstacle avoidance' or more generally 'anomaly detection' where an 'anomaly' is simply anything unusual or unexpected that enters the robots field of operation. 
 
-To define what's unusual and what's not we sample many trajectories from the ProMP framework and let the robot move along them while recording its joint-angles and LIDAR measurements at each point in time. We then use this 'normal' data to train 9 identical feed forward networks such that each of them learns to associate a given joint configuration with an expected signal to one of the LIDARs. 
+To define what's unusual and what's not we sample many trajectories from the ProMP framework  (see next section) and let the robot move along them while recording its joint-angles and LIDAR measurements at each point in time. We then use this 'normal' data to train 9 identical feed forward networks such that each of them learns to associate a given joint configuration with an expected signal to one of the LIDARs. 
 
 ![Lidar_Network](network.jpg)
 
@@ -122,11 +96,34 @@ where $W$ is a matrix which weighs the errors based on the initial prediction (b
 
 Finally one could justifiably ask why we used this specific approach for predicting lidar measurements. Apart from the presented method we also experimented with LSTMs, Autoencoders and several types of feed forward networks. We settled for the current strategy simply because in the limited timeframe it turned out to be the only one we got to work. 
 
+#### Module 3  - Reaching 
 
+When humans reach to grab an object they see,  the process is usually straighforward. The brain plans the movement in a very robust and smooth way, and the execution is controlled wihtout major problems. For robots this is is not as straighforward. Reaching for a point implies solving the inverse kinematics, i.e., finding a funciton $$\vec{q}=f(\vec{x})$$, where $\vec{x}$ is a desired end-effector possition and orientation, and $\vec{q}$ are the joint values of the robot. This funciton is heavily nonlinear, often not in closed-form solutions, and it is usually solved by taking the robot to the point step by step using optimizaiton.  
 
-## Adding the Parts together
+Our Panda arm makes this function more complicated, because $\vec{q}$ is of length 7 instead of length 6.  The reason for this is that it makes it easier to reach a point in space. Consider this: a desired position and orientation of an end-effector (i.e., the robot gripper) can be fully described already by 6 variables. The conclussion is that there are infinite solutions (we call them poses) that can take the robot to a given end effector position and orientation. 
 
+Aiming for a holistic approach that allows us to solve the inverse kinematics in a robust way, while at the same time integrating our lidar sensors, we decided to implement a probabilistic framework called Probabilistic Movement Primitives (ProMPs), descirbed nicely at [2]. We understand a movement primitive as a basic description of a movement, which is a simple trajectory.   By using a regression model with basis functions $\Phi(t)$, a parameter vector $$ \vec{w}$$  can be introduced as a compact representation of a given trajectory:
 
+$$ \vec{q}(t)= \Phi(t) \vec{w} $$
+
+The ProMP framework therefore allows us to introduce a probability distrubution $$  p(\vec{q}|\vec{w})_{t}$$ over trajectories evaluated at time $$t$$ [2].  Using this probabilistic formulation yields many advantages. What we found particularly useful is described next.
+
+###### → Learning from demonstrations 
+
+This framework allows us to teach the robot a joint space distribution over trajectories using kinestetic demostrations. In order to do this,  $$  p(\vec{w})$$  is assumed gaussian with mean $$  \vec{\mu_{w}}$$ and covariance $\Sigma_{w}$.  We learn these parameters using maximum likelihood after manually moving the Panda multiple times over a given trajectory. 
+
+###### → Efficient constrain of the joint space
+
+In the previous section we summarized our lidar approach. One of the challenges of learning the usual values of the lidars as a function of the joints is the fact that the joint space is huge - imagine all the possible permutations of seven joints! This poses several practical problems. The ProMP distribution $$  p(\vec{q}|\vec{w})_{t}$$  over the joints effectively constrains the portion of joint space that we use. By sampling trajectories from learned ProMPs we are able to explore in efficient ways, while keeping the system stochastic.
+
+###### → Integration with the sensors
+
+A very nice nice property of ProMPs is that it allows us to generalize to novel situations. This means that we can condition the distribution to generate a posterior that effectively constrains the robot to cross points of interest during the trajectory. Imagine two examples: 
+
+* The robot locates an apple in task space.  After obtianing an inverse kinematics solution, the probability distribution can be conditioned such that it reaches $$\vec{q}_{target}$$ with a certain accuracy.
+* The robot senses an anomaly and locates an obstacle in the task space that is close to the currently executed trajectory. After obtianing an inverse kinematics solution, the probability distribution can be conditioned such that it passes through an scape route $$\vec{q}_{avoid}$$ with a certain accuracy.  This scape route allos the robot to continue the trajectory and, if possible, reach the target. We computed these scape routes using heuristics, but we hypothesize that the ProMPs is an appropriate framework for obtaining them more robustly.
+
+We solved the inverse kinematics by using a numerical optimization method that started iterating at the mean of the ProMP. For targets close to the demostration, this optimization effectively converged in  joint space configurations $$\vec{q}_{target}$$  that were close to the distribution, allowing us to extract a conditioned trajectory.  In total we learned thee different trajectories: one panning over the table, one reaching for the right side of the table, and one reaching on the left side of the table. 
 
 
 
@@ -138,7 +135,15 @@ We think the opposite. We believe a robot that can interact with its environment
 
 This vision on assistive robotics is, of course, not new. But our belief is that  an holistic approach (i.e., a system in which machine learning, computer vision, classical robotics, human-robot interfaces and control theory are present and interact) is the way to go.  We hope that our progress with this Franka robot, who we nicknamed Sarah Connor*, helps laying a brick towards _that_ nicer future. 
 
+
+
+#### References 
+
 [1] Shaoqing Ren, Kaiming He, Ross B. Girschick, Jian Sun: Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks. IEEE Trans. Pattern Anal. Mach. Intell. 39(6): 1137-1149 (2017)
+
+[2] Paraschos, A., Daniel, C., Peters, J. et al.: Using probabilistic movement primitives in robotics. Auton Robot (2018) 42: 529. https://doi.org/10.1007/s10514-017-9648-7
+
+
 
 /* No pun intended.
 
