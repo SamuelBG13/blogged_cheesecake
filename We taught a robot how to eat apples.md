@@ -8,73 +8,31 @@ Ok, we did not, it does not chew nor digest the apple.  But we taught it how to 
 
 Over the last couple of weeks our team the (dubbed the *Deterministically Suboptimal Cheesecakes*) had the chance to work with a Franka Emika Panda robotic arm. The general goal was to come up with a framework which would  allow the robotic arm to identify objects and other agents, distinguish them from background and itself as well as avoid obstacles during movement. Additionally we could implement a *brownie task* which would make use of the other features while performing an action such as cleaning up a table or handing objects to another agent. 
 
-After some experimenting we settled for a an apple-centered approach: we would make the robot look for an apple, reach for it, pick it up and finally hand it to a human. All of this while constantly trying to not crash into any of the surrounding obstacles. We then further divided this main task into three subcomponents: object identification (*Seeing*), movement (*Reaching*) and obstacle avoidance (*Sensing*).  
+After some experimenting we settled for a an apple-centered approach: we would make the robot look for an apple, reach for it, pick it up and finally hand it to a human. All of this while constantly trying to not crash into any of the surrounding obstacles. We then further divided this main task into three subcomponents: object identification (*Seeing*), obstacle avoidance (*Sensing*) and movement (*Reaching*) .  
 
 
 
 #### Module 1  - Seeing
 
-To be able to interact with the world the robot must have some sense of what this world consists of. This means it has to be able to identify objects and be able to know where they are. For this part of the task we could make use of the pandas rgb-d camera, but even with color and depth information image segmentation and object identification still poses a huge technical challenge, so the first step was to reduce and simplify: 
+To be able to interact with the world the robot must have some sense of what this world consists of. This means it has to be able to identify and locate objects. For this part of the task we could make use of the pandas rgb-d camera, but even with color and depth information image segmentation and object identification still poses a huge technical challenge. Our first step was to reduce and simplify. Our prior goal was to know the locations of an apple in a frame taken by the camera.
 
-Prior goal is to find the locations of apples in a frame taken by the camera.
+We decided not to train an object detection network from scratch, but instead make use of existing models, mainly the models from TensorFlow API model zoo. We chose a model trained on the CoCo dataset, which contains images from 90 common objects such as apples, people, tables, laptops, etc. This dataset is commonly used to train networoks for segmentation, detection and captioning tasks.  Next to labels for images, it also provides annotations and masks for the location of objects as coordinates in image frames. So sequentially the networks trained on this dataset will learn bounding boxes around the objects of interest.
 
-First of all we decided to not train an object detection network from scratch but make use of existing models, mainly the models from Tensorflow API model zoo. Secondly we decided to limit the scope of objects drastically. Instead of making use of all the categories defined on dataset which network is trained, we focused on only two: 'apples' and 'humans'. After the network returns classification results, we filter them by these two categories.
+We decided to use the Faster-RCNN model  from Tensorflow API, which was first introduced by Ren inl [1]. This network uses VGG19 architecture and wins in accuracy because region proposals are offered frst and classification is only performed on the proposed regions. Also the classification is pretty fast:  for one frame to be classified, average computation time on Nvidia GeForce 1080 GPU is 60 ms. 
 
-For giving an introduction to Tensorflow Object Detection API, there are several detection models provided by Tensorflow. Provided models have different architectures which are also trained on different datasets such as Kitti, CoCo and Open Image datasets etc. These models can be directly deployed in order to find objects in the range of datasets trained. 
-
-#### CoCo Dataset
-
-We chose the models trained on CoCo dataset for the purpose of detecting and locating apples on the scene. CoCo dataset is image dataset which has 90 categories spanning common objects such as apple, person, table, laptop etc. This dataset is used for segmentation, detection and captioning tasks.  Next to labels for images, it also provides annotations and masks for the location of objects as coordinates in image frames. So sequentially the networks trained on this dataset are trained on bounding boxes where the objects are located in the frame. 
-
-<img src="coco.png"
-​     alt="Examples from CoCo dataset, images with masks of target categories"
-​     style="float: left; margin-right: 10px;" />
-
-
-
-Without retraining them, we tested SSD and Faster-RCNN models from Tensorflow model zoo. SSD models are more beneficial when latency is priority. They return object proposals with their bounding boxes within just 1 feed forward pass. In Faster-RCNN the region proposals are offered first and over region proposals classifications are done. It is slower in comparison to SDD however its accuracy is higher. You can see main differences between them in the image below:
-
-<img src="network_ssd_frcnn.png"
-​     alt="Comparison of SSD and Faster-RCNN architectures" />
-
-With SSD architecture, we observed that object size plays a bigger role, it cannot locate small objects accurately. In Faster-RCNN object size does not play that big role, therefore in the end we decided to use Faster-RCNN architecture from Tensorflow API. For beginning, VGG19 architecture is investigated which has 13 shareable convolutional layers. Over the convolutional layers, another network for region proposal is used. Output of last conv layer is fed into network. The output of region proposal network is fed into 2 sibling fully connected layers. One of them returns the coordinates of possible bounding boxes as the other one returns the objectness score (object vs not object). After the last VGG19 convolutional layer, region proposal network and connection to fully connected layers are shown in the figure below with example cases from Ren, He et. Al [1]. 
-
-<img src="region_proposal.png"
-​     alt="Over fully connected layer, network of region proposal" />
-
-The training is done in a way, for each region proposed by the network, a binary label is assigned. The intersection over union between ground truth box and proposed region is found, if it is greater than 0.7 it is assigned +1, else if it is less than 0.3 it is assigned -1. The values in between 0.7 and 0.3 are not taken into consideration. The classification loss is taken as log loss between two classes (object vs not object). Mini batch stochastic gradient descent is used for training.
-
-For deploying the network, there are some configuration files provided which you can enter your details related to re-training and evaluation. It is deployed on Tensorflow and Python has been used for implementation. However we did not retrain it, after loading weights, feeding the interest frames into input tensor, bounding boxes, detected classes, classification scores are returned as output. You can find implementation under our source code *object_classification_toolbox.py / object_classifier.py*.  If you are interested in retraining [you can follow the post under page:](https://medium.com/@WuStangDan/step-by-step-tensorflow-object-detection-api-tutorial-part-1-selecting-a-model-a02b6aabe39e) .
-
-The image below shows an example classification. Obviously the network finds and localizes the apple (in the upper left corner) with high confidence. It also gives us bounding  boxes for other objects such as a suitcase, a laptop and a book, but we can safely ignore such hallucinations. 
-
+Once the deployed network is loaded, one can feed images. The model will then return  the bounding boxes, detected classes and classification scores as output. The image below shows an example classification. We can see that the network finds and localizes the apple (in the upper left corner) with high confidence. For our purposed we can ignore all  other detected objects.
 
 
 ![Apples](apple_detection.png)
 
-For one frame to be classified, average computation time on Nvidia GeForce 1080 GPU is 60 ms. 
+###### From image coordinates to the frame of the robot
 
-Once the apple is identified and localized within a bounding box we can use the information from the depth camera to far we have to reach. 
+But localizing the apple in the rgb image is only the first step. To know where the robot has to reach we need to map the pixel location into the 3D space. To do this, we consider the center coordinates of the bounding boxes of a detected apple. Then we use the camera's focal length $(fx, fy)$ and principal point  $(cx, cy)$:
 
-#### From image coordinates to world coordinates
+$$  Pos_x= \frac{x - cx}{ fx} d$$,      $$Pos_y= \frac{y - cy}{ fy} d $$
 
-For returning real world coordinates, the center coordinates of bounding boxes in image frame are considered. Later on, by using focal length and principal point parameters from camera intrinsic parameters the image coordinates are carried upon camera coordinate system as:
+To calcualte the $Z$ coordinte we make use of the depth information $$d$$. All these calcualtions however are still done with respect to the camaera position. In a last step we therefore have to take into acount the cameras position with respect to the robots bases (i.e. the global coordinate system). This final tansformation is done using the Deanavit Harafflk,an tranformation. 
 
-X = (x - cx) / (fx\*scaling_factor) <br />
-Y = (y - cy) / (fy\*scaling_factor) <br />
-
-cx and cy = principal point coordinates in x and y axis <br />
-fx and fy = focal length in x and y axis <br />
-
-In Intel RealSense camera, focal length and principal point parameters are as: <br />
-
-fx = 615.607<br />
-fy = 615.607<br />
-
-cx = 317.79<br />
-cy = 239.907<br />
-
-We calculate the coordinates in units of meter in the end. Later on by using rotation and translation of camera with respect to base of Franka panda robot, the real coordinates are transformed with respect to the base. 
 
 
 
@@ -82,31 +40,29 @@ We calculate the coordinates in units of meter in the end. Later on by using rot
 
 Apart from the rgb-d camera the robot is aditionally equipped with  9 LIDAR sensors. LIDARs (short for 'light' and 'radar') use light pulses to sense the distance to the next nearest object. Here we use them for 'obstacle avoidance' or more generally 'anomaly detection' where an 'anomaly' is simply anything unusual or unexpected that enters the robots field of operation. 
 
-To define what's unusual and what's not we sample many trajectories from the ProMP framework  (see next section) and let the robot move along them while recording its joint-angles and LIDAR measurements at each point in time. We then use this 'normal' data to train 9 identical feed forward networks such that each of them learns to associate a given joint configuration with an expected signal to one of the LIDARs. 
+To define what's unusual and what's not we sample many trajectories from reaching morvements (using the ProMP framework  decribed in the next section) and let the robot move along them while recording its joint-angles and LIDAR measurements at each point in time. We then use this 'normal' data to train 9 identical fullz connected feed forward networks such that each of them learns to associate a given joint configuration with an expected signal to one of the LIDARs. 
 
 ![Lidar_Network](network.jpg)
 
-Once the networks have learned what sensory signals to expect in given position, we can compare these predictions to the actual measurements and use the deviation of the measurement from the prediction as indication that an anomaly has entered the scene. A little more specifically what we do is, we sample a timeseries of roughly 10 LIDAR measurements $$M$$ and joint-angel configurations over the course of 0.1s. We then calculate the predictions $$P$$ from the joint angles and calculate the deviation via: 
+Once the networks have learned what sensory signals to expect in given position, we can compare these predictions to the actual measurements and use the deviation of the measurement from the prediction as indication that an anomaly has entered the scene. A little more specifically what we do is, we sample a timeseries of roughly 10 LIDAR measurements $$M$$ and joint-angel configurations over the course of 0.1 seconds. We then calculate the predictions $$P$$ from the joint angles and compute the deviation via: 
 
 
 $$
 \overline{err} = median\left((P-M)\odot W\right)
 $$
-where $W$ is a matrix which weighs the errors based on the initial prediction (because a misprediction in an area  out of the robots reach should be feared less than one that might lead to a collision). Not using the absolute difference between $P$ and $M$ ensures that the robot only worries about things which are closer than expected (because only those pose any danger in  this setting). And finally taking the median over a number of samples balances out some of the measurement- noise. 
+where $W$ is a matrix which weighs the errors based on the initial prediction (because a misprediction in an area  out of the robots reach should be feared less than one that might lead to a collision). Not using the absolute of difference between $P$ and $M$ ensures that the robot only worries about things which are closer than expected (because only those pose any danger in  this setting). And finally taking the median over a number of samples balances out some of the measurement- noise. 
 
-Finally one could justifiably ask why we used this specific approach for predicting lidar measurements. Apart from the presented method we also experimented with LSTMs, Autoencoders and several types of feed forward networks. We settled for the current strategy simply because in the limited timeframe it turned out to be the only one we got to work. 
+
 
 #### Module 3  - Reaching 
 
-When humans reach to grab an object they see,  the process is usually straighforward. The brain plans the movement in a very robust and smooth way, and the execution is controlled wihtout major problems. For robots this is is not as straighforward. Reaching for a point implies solving the inverse kinematics, i.e., finding a funciton $$\vec{q}=f(\vec{x})$$, where $\vec{x}$ is a desired end-effector possition and orientation, and $\vec{q}$ are the joint values of the robot. This funciton is heavily nonlinear, often not in closed-form solutions, and it is usually solved by taking the robot to the point step by step using optimizaiton.  
+Reaching an object is a notoriously non trivial problem for robot arms because usually many different joint configurations allow to get to the same position This problem is known as inverse kinematics and gets more and more challenging with each DoF. Our Panda arm makes this function more complicated, because  the joint vector $\vec{q}$ is of length 7 instead of length 6.  The reason for this is that it makes it easier to reach a point in space. Consider this: a desired position and orientation of an end-effector (i.e., the robot gripper) can be fully described already by 6 variables.
 
-Our Panda arm makes this function more complicated, because $\vec{q}$ is of length 7 instead of length 6.  The reason for this is that it makes it easier to reach a point in space. Consider this: a desired position and orientation of an end-effector (i.e., the robot gripper) can be fully described already by 6 variables. The conclussion is that there are infinite solutions (we call them poses) that can take the robot to a given end effector position and orientation. 
-
-Aiming for a holistic approach that allows us to solve the inverse kinematics in a robust way, while at the same time integrating our lidar sensors, we decided to implement a probabilistic framework called Probabilistic Movement Primitives (ProMPs), descirbed nicely at [2]. We understand a movement primitive as a basic description of a movement, which is a simple trajectory.   By using a regression model with basis functions $\Phi(t)$, a parameter vector $$ \vec{w}$$  can be introduced as a compact representation of a given trajectory:
+Aiming for a holistic approach that allows us to solve the inverse kinematics in a robust way, while at the same time integrating our lidar sensors, we decided to implement a probabilistic framework called Probabilistic Movement Primitives (ProMPs), descirbed nicely at [2]. We understand a movement primitive as a basic description of a movement, which is a simple trajectory in the space of joint angles. By using a regression model with basis functions $\Phi(t)$, a parameter vector $$ \vec{w}$$  can be introduced as a compact representation of a given trajectory:
 
 $$ \vec{q}(t)= \Phi(t) \vec{w} $$
 
-The ProMP framework therefore allows us to introduce a probability distrubution $$  p(\vec{q}|\vec{w})_{t}$$ over trajectories evaluated at time $$t$$ [2].  Using this probabilistic formulation yields many advantages. What we found particularly useful is described next.
+The ProMP framework therefore allows us to introduce a probability distrubution $$  p(\vec{q}|\vec{w})_{t}$$ over trajectories evaluated at time $$t$$ which has many imporant advantages described below.
 
 ###### → Learning from demonstrations 
 
@@ -114,7 +70,7 @@ This framework allows us to teach the robot a joint space distribution over traj
 
 ###### → Efficient constrain of the joint space
 
-In the previous section we summarized our lidar approach. One of the challenges of learning the usual values of the lidars as a function of the joints is the fact that the joint space is huge - imagine all the possible permutations of seven joints! This poses several practical problems. The ProMP distribution $$  p(\vec{q}|\vec{w})_{t}$$  over the joints effectively constrains the portion of joint space that we use. By sampling trajectories from learned ProMPs we are able to explore in efficient ways, while keeping the system stochastic.
+The ProMP distribution $$  p(\vec{q}|\vec{w})_{t}$$  over the joints effectively constrains the portion of joint space that we use. By sampling trajectories from learned ProMPs we are able to explore in efficient ways (for example to train the lidar classification networks) while keeping the system stochastic.
 
 ###### → Integration with the sensors
 
